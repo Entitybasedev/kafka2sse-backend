@@ -1,4 +1,3 @@
-import pytest
 
 from src.config import Config, KafkaConfig, ServerConfig
 

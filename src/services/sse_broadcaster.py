@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 
 from src.models.sse_event import SSEEvent

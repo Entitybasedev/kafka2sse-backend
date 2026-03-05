@@ -31,7 +31,6 @@ class KafkaConsumerService:
         return Consumer(conf)
 
     async def _consume_loop(self):
-        loop = asyncio.get_event_loop()
         while self._running:
             try:
                 msg = self._consumer.poll(timeout=1.0)
