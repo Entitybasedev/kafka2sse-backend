@@ -1,12 +1,13 @@
 import logging
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from datetime import datetime
 
 from confluent_kafka import KafkaException, Producer
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sse_starlette import EventSourceResponse
 
 from src.config import config
 from src.services.sse_broadcaster import SSEBroadcaster
@@ -68,8 +69,6 @@ async def stream(
     since: str | None = None,
     limit: int | None = None,
 ):
-    from datetime import datetime
-
     since_dt: datetime | None = None
     if since:
         since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
@@ -83,23 +82,17 @@ async def stream(
 
     broadcaster = SSEBroadcaster()
 
-    async def event_generator() -> AsyncIterator[str]:
+    async def event_generator():
         async for event in broadcaster.stream_events(
             client, topic, stream_manager.unsubscribe
         ):
             yield event
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return EventSourceResponse(event_generator())
 
 
 @app.get("/")
 async def root():
-    from fastapi.responses import RedirectResponse
-
     return RedirectResponse(url="/docs")
 
 
