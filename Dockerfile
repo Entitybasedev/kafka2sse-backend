@@ -1,0 +1,37 @@
+FROM python:3.13-slim AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir \
+    "litestar>=2.0,<3.0" \
+    "confluent-kafka>=2.3,<3.0" \
+    "pydantic>=2.5,<3.0" \
+    "pyyaml>=6.0,<7.0" \
+    "uvicorn[standard]>=0.25,<1.0"
+
+FROM python:3.13-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    librdkafka1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY src ./src
+COPY README.md .env.example ./
+
+ENV PYTHONPATH=/app
+ENV KAFKA_BROKERS=localhost:9092
+ENV KAFKA_CLIENT_QUEUE_SIZE=100
+ENV HOST=0.0.0.0
+ENV PORT=8888
+
+EXPOSE 8888
+
+CMD ["python", "-m", "src.main"]
