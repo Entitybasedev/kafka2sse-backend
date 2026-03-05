@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
-    "litestar>=2.0,<3.0" \
+    "fastapi>=0.115,<1.0" \
+    "httpx>=0.27,<1.0" \
     "confluent-kafka>=2.3,<3.0" \
     "pydantic>=2.5,<3.0" \
     "pyyaml>=6.0,<7.0" \

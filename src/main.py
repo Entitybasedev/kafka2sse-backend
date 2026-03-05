@@ -1,20 +1,107 @@
 import logging
 
-from litestar import Litestar
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from confluent_kafka import KafkaException, Producer
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from src.config import config
-from src.routes.health import health
-from src.routes.streams import stream
-from src.routes.topics import list_topics
+from src.services.sse_broadcaster import SSEBroadcaster
+from src.services.stream_manager import stream_manager
+
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-app = Litestar(
-    route_handlers=[health, stream, list_topics],
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await stream_manager.shutdown()
+
+
+app = FastAPI(
+    title="Kafka2SSE API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
+
+
+class HealthResponse(BaseModel):
+    status: str
+    kafka: str
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
+    kafka_status = "disconnected"
+    try:
+        producer = Producer({"bootstrap.servers": config.kafka.brokers})
+        producer.list_topics(timeout=5)
+        kafka_status = "connected"
+    except KafkaException:
+        pass
+
+    return HealthResponse(
+        status="ok" if kafka_status == "connected" else "degraded",
+        kafka=kafka_status,
+    )
+
+
+@app.get("/v1/topics")
+async def list_topics():
+    return {"topics": stream_manager.get_topics()}
+
+
+@app.get("/v1/streams/{topic}")
+async def stream(
+    topic: str,
+    offset: int | None = None,
+    since: str | None = None,
+    limit: int | None = None,
+):
+    from datetime import datetime
+
+    since_dt: datetime | None = None
+    if since:
+        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+
+    client = await stream_manager.subscribe(
+        topic=topic,
+        offset=offset,
+        since=since_dt,
+        limit=limit,
+    )
+
+    broadcaster = SSEBroadcaster()
+
+    async def event_generator() -> AsyncIterator[str]:
+        async for event in broadcaster.stream_events(
+            client, topic, stream_manager.unsubscribe
+        ):
+            yield event
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/")
+async def root():
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/docs")
+
 
 if __name__ == "__main__":
     import uvicorn
