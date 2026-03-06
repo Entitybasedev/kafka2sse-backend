@@ -1,5 +1,5 @@
 import logging
-
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -35,6 +35,18 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+# Configure librdkafka to use Python's logging with timestamps
+for logger_name in ["rdkafka", "rdkafka.int", "rdkafka.conn", "rdkafka consumer"]:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+
+# Suppress confluent_kafka debug logs
+logging.getLogger("confluent_kafka").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
