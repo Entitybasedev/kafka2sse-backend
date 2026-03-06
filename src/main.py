@@ -3,11 +3,27 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from confluent_kafka import KafkaException, Producer
+from confluent_kafka import KafkaError, KafkaException, Producer
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sse_starlette import EventSourceResponse
+
+
+def get_available_topics() -> list[str]:
+    try:
+        producer = Producer({"bootstrap.servers": config.kafka.brokers})
+        cluster_metadata = producer.list_topics(timeout=5)
+        return sorted(
+            topic
+            for topic in cluster_metadata.topics.keys()
+            if not topic.startswith("_")
+        )
+    except KafkaException as e:
+        if e.args[0].code() == KafkaError._TRANSPORT:
+            return []
+        raise
+
 
 from src.config import config
 from src.services.sse_broadcaster import SSEBroadcaster
@@ -59,7 +75,7 @@ async def health() -> HealthResponse:
 
 @app.get("/v1/topics")
 async def list_topics():
-    return {"topics": stream_manager.get_topics()}
+    return {"topics": get_available_topics()}
 
 
 @app.get("/v1/streams/{topic}")
