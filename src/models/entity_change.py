@@ -1,6 +1,7 @@
 from enum import Enum
+from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class ChangeType(str, Enum):
@@ -17,24 +18,21 @@ class ChangeType(str, Enum):
 
 
 class EntityChange(BaseModel):
-    entity_id: str = Field(..., description="The ID of the entity that changed")
-    revision_id: int = Field(..., ge=1, description="The new revision ID after the change")
-    change_type: ChangeType = Field(..., description="The type of change")
-    from_revision_id: int = Field(default=0, ge=0, description="The previous revision ID")
-    changed_at: str = Field(..., description="Timestamp of the change in ISO 8601 format")
-    edit_summary: str = Field(default="", description="Summary of the edit")
+    """Entity change event consumed from Kafka."""
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "entity_id": "Q42",
-                    "revision_id": 12345,
-                    "change_type": "edit",
-                    "from_revision_id": 12344,
-                    "changed_at": "2023-01-01T12:00:00Z",
-                    "edit_summary": "Updated description",
-                }
-            ]
-        }
-    }
+    model_config = ConfigDict(populate_by_name=True)
+
+    entity_id: str = Field(alias="id", description="The ID of the entity that changed")
+    revision_id: int = Field(alias="rev", ge=1, description="The new revision ID after the change")
+    change_type: ChangeType = Field(alias="type", description="The type of change")
+    from_revision_id: int = Field(default=0, ge=0, alias="from_rev", description="The previous revision ID")
+    changed_at: str = Field(alias="at", description="Timestamp of the change in ISO 8601 format")
+    edit_summary: str = Field(default="", alias="summary", description="Summary of the edit")
+    user_id: str = Field(alias="user", description="ID of the user who made the change")
+
+    @field_serializer("changed_at")
+    def serialize_changed_at(self, value: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        if isinstance(value, datetime):
+            return value.isoformat() + "Z"
+        return str(value)
