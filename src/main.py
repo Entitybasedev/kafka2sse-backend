@@ -82,8 +82,12 @@ class HealthResponse(BaseModel):
 async def health() -> HealthResponse:
     kafka_status = "disconnected"
     try:
-        producer = Producer({"bootstrap.servers": config.kafka.brokers})
-        producer.list_topics(timeout=5)
+        producer = Producer({
+            "bootstrap.servers": config.kafka.brokers,
+            "socket.timeout.ms": 3000,
+            "metadata.request.timeout.ms": 5000,
+        })
+        producer.list_topics(timeout=3)
         kafka_status = "connected"
     except KafkaException:
         pass
