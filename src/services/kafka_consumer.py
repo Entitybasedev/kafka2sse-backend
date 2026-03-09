@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class KafkaConsumerService:
+    """Wraps a Kafka consumer for a single topic, processes messages and routes to callback."""
+    
     def __init__(self, topic: str, on_event: Callable[[str, SSEEvent], None]):
         self.topic = topic
         self._on_event = on_event

@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class RedisState:
+    """Shared state manager using Valkey (Redis alternative) for multi-worker coordination."""
+    
     def __init__(self):
         self._client: Optional[valkey.Valkey] = None
         self._lock = asyncio.Lock()

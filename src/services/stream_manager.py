@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class StreamManager:
+    """Manages Kafka consumers and SSE client connections, handles subscription/unsubscription."""
+    
     def __init__(self):
         self._topics: dict[str, KafkaConsumerService] = {}
         self._clients: dict[str, set[ClientConnection]] = defaultdict(set)

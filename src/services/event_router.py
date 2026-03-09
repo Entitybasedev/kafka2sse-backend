@@ -7,6 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 class EventRouter:
+    """Routes Kafka messages to registered callbacks."""
+    
     def __init__(self, on_event: Callable[[str, SSEEvent], None]):
         self._on_event = on_event
 

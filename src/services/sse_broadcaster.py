@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class SSEBroadcaster:
+    """Formats and streams SSE events to connected clients."""
+    
     async def stream_events(
         self,
         client: ClientConnection,

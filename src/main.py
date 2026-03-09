@@ -1,3 +1,23 @@
+"""
+Kafka-to-SSE streaming service.
+
+Architecture:
+- SSE endpoint creates a thread-local Kafka consumer that runs in a thread pool
+  (via asyncio event loop's run_in_executor) to avoid blocking the async event loop.
+- The Kafka consumer polls messages and puts them into an asyncio.Queue shared with
+  the async event_generator.
+- This design allows the FastAPI server to remain responsive while streaming SSE.
+
+Thread pool explanation:
+- asyncio.run_in_executor(None, func) runs func in Python's default ThreadPoolExecutor
+- confluent-kafka Consumer.poll() is a blocking call - it waits until a message arrives
+- Without the thread pool, poll() would block the entire event loop, freezing all requests
+
+Example:
+    >>> loop = asyncio.get_event_loop()
+    >>> kafka_task = loop.run_in_executor(None, blocking_kafka_function)
+    This runs blocking_kafka_function in a separate thread, keeping the event loop responsive.
+"""
 import asyncio
 import logging
 import sys
@@ -162,6 +182,25 @@ async def stream(
     since: str | None = None,
     limit: int | None = None,
 ):
+    """
+    Stream SSE events from a Kafka topic.
+    
+    Implementation uses thread pool executor for Kafka consumer:
+    - Creates a blocking kafka_consumer_thread() that calls Consumer.poll()
+    - Runs it in thread pool via loop.run_in_executor()
+    - Shares events via asyncio.Queue with the async event_generator()
+    
+    This prevents poll() from blocking the FastAPI event loop.
+    
+    Args:
+        topic: Kafka topic to stream from
+        offset: Starting offset (optional)
+        since: Start from timestamp (optional)
+        limit: Maximum events to send before closing (optional)
+    
+    Returns:
+        Server-Sent Events response that streams Kafka messages as JSON.
+    """
     logger.info(f"Stream endpoint called for topic={topic}")
 
     # Create a client connection
@@ -175,6 +214,23 @@ async def stream(
     import json
 
     def kafka_consumer_thread():
+        """
+        Blocking Kafka consumer that runs in a separate thread.
+        
+        Runs in ThreadPoolExecutor to avoid blocking the async event loop.
+        Polls Kafka and puts messages into client.queue for the SSE generator.
+        
+        Note:
+            This is a blocking function - must run in thread pool, not async context.
+            The confluent-kafka Consumer.poll() is a blocking call that waits for messages.
+            Without running in a thread, it would freeze the entire FastAPI server.
+        
+        How it works:
+            1. Creates a Kafka Consumer and subscribes to the topic
+            2. Loops forever calling poll() - this BLOCKS waiting for messages
+            3. When message arrives, puts it in the asyncio.Queue
+            4. The async event_generator reads from the queue without blocking
+        """
         conf = {
             "bootstrap.servers": config.kafka.brokers,
             "group.id": f"sse-{topic}-{client.id}",

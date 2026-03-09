@@ -3,7 +3,11 @@ from pydantic import BaseModel, Field, field_validator
 from src.models.entity_change import EntityChange
 
 
-class SSEEvent(BaseModel):
+class SSEEvent:
+    """Server-Sent Events message format for entity changes."""
+    
+    model_config = {"populate_by_name": True}
+    
     event_type: str = Field(default="entity_change", description="Event type identifier")
     id: str = Field(..., description="Unique ID for SSE event")
     data: EntityChange = Field(..., description="The entity change data")

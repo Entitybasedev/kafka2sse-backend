@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class ChangeType(str, Enum):
+    """Enumeration of possible entity change types."""
     CREATION = "creation"
     EDIT = "edit"
     REDIRECT = "redirect"
