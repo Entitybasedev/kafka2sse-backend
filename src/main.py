@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -27,8 +28,9 @@ def get_available_topics() -> list[str]:
 
 
 from src.config import config
+from src.services.client_connection import ClientConnection
 from src.services.sse_broadcaster import SSEBroadcaster
-from src.services.stream_manager import stream_manager
+from src.services.stream_manager import redis_state, stream_manager
 
 
 logging.basicConfig(
@@ -103,6 +105,56 @@ async def list_topics():
     return {"topics": get_available_topics()}
 
 
+@app.get("/v1/streams/{topic}/metadata")
+async def stream_metadata(topic: str):
+    from confluent_kafka import Consumer, TopicPartition
+
+    try:
+        consumer = Consumer({
+            "bootstrap.servers": config.kafka.brokers,
+            "group.id": "metadata-reader",
+        })
+        metadata = consumer.list_topics(topic, timeout=5)
+        topic_meta = metadata.topics.get(topic)
+        if not topic_meta:
+            consumer.close()
+            return {
+                "topic": topic,
+                "earliest_offset": 0,
+                "latest_offset": 0,
+                "message_count": 0,
+            }
+
+        partitions = topic_meta.partitions
+        if partitions:
+            partition_id = list(partitions.keys())[0]
+            tp = TopicPartition(topic, partition_id)
+            low, high = consumer.get_watermark_offsets(tp)
+            consumer.close()
+            return {
+                "topic": topic,
+                "earliest_offset": low,
+                "latest_offset": high,
+                "message_count": high - low if high > 0 and low >= 0 else 0,
+            }
+        consumer.close()
+        return {
+            "topic": topic,
+            "earliest_offset": 0,
+            "latest_offset": 0,
+            "message_count": 0,
+        }
+    except Exception as e:
+        logger.exception(f"Error getting metadata for {topic}")
+        return {
+            "topic": topic,
+            "earliest_offset": 0,
+            "latest_offset": 0,
+            "message_count": 0,
+            "error": str(e),
+        }
+
+
 @app.get("/v1/streams/{topic}")
 async def stream(
     topic: str,
@@ -110,24 +162,77 @@ async def stream(
     since: str | None = None,
     limit: int | None = None,
 ):
-    since_dt: datetime | None = None
-    if since:
-        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    logger.info(f"Stream endpoint called for topic={topic}")
 
-    client = await stream_manager.subscribe(
-        topic=topic,
-        offset=offset,
-        since=since_dt,
-        limit=limit,
-    )
+    # Create a client connection
+    client = ClientConnection(queue_size=100)
+    client.limit = limit
 
-    broadcaster = SSEBroadcaster()
+    # Create kafka consumer in a separate thread
+    from confluent_kafka import Consumer, TopicPartition
+    from src.models.entity_change import EntityChange
+    from src.models.sse_event import SSEEvent
+    import json
+
+    def kafka_consumer_thread():
+        conf = {
+            "bootstrap.servers": config.kafka.brokers,
+            "group.id": f"sse-{topic}-{client.id}",
+            "auto.offset.reset": "latest" if offset is None else "error",
+            "enable.auto.commit": True,
+        }
+        consumer = Consumer(conf)
+        
+        if offset is not None:
+            consumer.assign([TopicPartition(topic, 0, offset)])
+        else:
+            consumer.subscribe([topic])
+        
+        logger.info(f"Kafka consumer started for {topic}")
+        
+        while True:
+            msg = consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                continue
+            
+            try:
+                value = json.loads(msg.value().decode("utf-8"))
+                entity_change = EntityChange(**value)
+                event = SSEEvent(
+                    event_type="entity_change",
+                    id=str(msg.offset()),
+                    data=entity_change,
+                )
+                try:
+                    client.queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    try:
+                        client.queue.get_nowait()
+                        client.queue.put_nowait(event)
+                    except:
+                        pass
+            except:
+                pass
+
+    # Start kafka in thread pool
+    loop = asyncio.get_event_loop()
+    kafka_task = loop.run_in_executor(None, kafka_consumer_thread)
 
     async def event_generator():
-        async for event in broadcaster.stream_events(
-            client, topic, stream_manager.unsubscribe
-        ):
-            yield event
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(client.queue.get(), timeout=30)
+                    data = event.model_dump_json()
+                    yield f"data: {data}\n\n"
+                except asyncio.TimeoutError:
+                    yield "data: {\"ping\": true}\n\n"
+        except asyncio.CancelledError:
+            logger.info("Event generator cancelled")
+        finally:
+            kafka_task.cancel()
 
     return EventSourceResponse(event_generator())
 

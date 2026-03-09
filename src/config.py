@@ -9,6 +9,11 @@ class KafkaConfig(BaseModel):
     client_queue_size: int = int(getenv("KAFKA_CLIENT_QUEUE_SIZE", "100"))
 
 
+class ValkeyConfig(BaseModel):
+    host: str = getenv("VALKEY_HOST", "localhost")
+    port: int = int(getenv("VALKEY_PORT", "6379"))
+
+
 class ServerConfig(BaseModel):
     host: str = getenv("HOST", "0.0.0.0")
     port: int = int(getenv("PORT", "8888"))
@@ -16,6 +21,7 @@ class ServerConfig(BaseModel):
 
 class Config(BaseModel):
     kafka: KafkaConfig = KafkaConfig()
+    valkey: ValkeyConfig = ValkeyConfig()
     server: ServerConfig = ServerConfig()
 
     @cached_property

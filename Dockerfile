@@ -14,7 +14,8 @@ RUN pip install --no-cache-dir \
     "confluent-kafka>=2.3,<3.0" \
     "pydantic>=2.5,<3.0" \
     "pyyaml>=6.0,<7.0" \
-    "uvicorn[standard]>=0.25,<1.0"
+    "uvicorn[standard]>=0.25,<1.0" \
+    "valkey>=0.15"
 
 FROM python:3.13-slim
 WORKDIR /app
@@ -31,6 +32,7 @@ COPY README.md .env.example ./
 
 ENV PYTHONPATH=/app
 ENV KAFKA_BROKERS=localhost:9092
+ENV VALKEY_HOST=localhost
 ENV KAFKA_CLIENT_QUEUE_SIZE=100
 ENV HOST=0.0.0.0
 ENV PORT=8888

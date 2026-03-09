@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from src.models.sse_event import SSEEvent
 from src.services.stream_manager import ClientConnection
@@ -14,6 +15,8 @@ class SSEBroadcaster:
         topic: str,
         unsubscribe_callback,
     ):
+        worker_pid = os.getpid()
+        logger.info(f"SSE stream started for client {client.id}, topic {topic}, worker {worker_pid}")
         try:
             while not client.disconnected:
                 if client.limit and client.events_sent >= client.limit:
@@ -24,6 +27,7 @@ class SSEBroadcaster:
                     event = await asyncio.wait_for(
                         client.queue.get(), timeout=30.0
                     )
+                    logger.info(f"[Worker {worker_pid}] SSE got event {event.id} for client {client.id}")
                 except asyncio.TimeoutError:
                     continue
 

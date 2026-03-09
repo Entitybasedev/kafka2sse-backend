@@ -12,6 +12,7 @@ class EventRouter:
 
     def route(self, topic: str, event: SSEEvent):
         try:
+            logger.info(f"EventRouter routing event {event.id} for topic {topic}")
             self._on_event(topic, event)
         except Exception as e:
             logger.exception(f"Error routing event for topic {topic}: {e}")

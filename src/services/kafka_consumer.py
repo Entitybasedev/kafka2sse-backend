@@ -31,6 +31,9 @@ class KafkaConsumerService:
         return Consumer(conf)
 
     async def _consume_loop(self):
+        import os
+        worker_pid = os.getpid()
+        logger.info(f"Starting consume loop for {self.topic} in worker {worker_pid}")
         while self._running:
             try:
                 msg = self._consumer.poll(timeout=1.0)
@@ -42,6 +45,7 @@ class KafkaConsumerService:
                     logger.error(f"Kafka error: {msg.error()}")
                     raise KafkaException(msg.error())
 
+                logger.info(f"[Worker {worker_pid}] Received message from Kafka: offset={msg.offset()}")
                 await self._process_message(msg)
             except Exception as e:
                 logger.exception(f"Error in consume loop: {e}")
@@ -72,28 +76,35 @@ class KafkaConsumerService:
         offset: Optional[int] = None,
         since: Optional[datetime] = None,
     ):
+        logger.info(f"Starting Kafka consumer for {self.topic}")
         self._consumer = self._create_consumer()
         self._running = True
 
-        if offset is not None:
-            self._consumer.assign([TopicPartition(self.topic, 0, offset)])
-            logger.info(f"Consumer for {self.topic} seeked to offset {offset}")
-        elif since is not None:
-            timestamp_ms = int(since.timestamp() * 1000)
-            offsets = self._consumer.offsets_for_times(
-                [TopicPartition(self.topic, 0, timestamp_ms)]
-            )
-            if offsets:
-                self._consumer.assign(offsets)
-                logger.info(f"Consumer for {self.topic} seeked to timestamp {since}")
+        # Run blocking Kafka operations in thread pool
+        def setup_consumer():
+            if offset is not None:
+                self._consumer.assign([TopicPartition(self.topic, 0, offset)])
+                logger.info(f"Consumer for {self.topic} seeked to offset {offset}")
+            elif since is not None:
+                timestamp_ms = int(since.timestamp() * 1000)
+                offsets = self._consumer.offsets_for_times(
+                    [TopicPartition(self.topic, 0, timestamp_ms)]
+                )
+                if offsets:
+                    self._consumer.assign(offsets)
+                    logger.info(f"Consumer for {self.topic} seeked to timestamp {since}")
+                else:
+                    self._consumer.subscribe([self.topic])
+                    logger.warning(
+                        f"No offset found for timestamp {since}, subscribing from latest"
+                    )
             else:
                 self._consumer.subscribe([self.topic])
-                logger.warning(
-                    f"No offset found for timestamp {since}, subscribing from latest"
-                )
-        else:
-            self._consumer.subscribe([self.topic])
-            logger.info(f"Consumer for {self.topic} subscribed from latest")
+                logger.info(f"Consumer for {self.topic} subscribed from latest")
+
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, setup_consumer)
 
         self._task = asyncio.create_task(self._consume_loop())
         logger.info(f"Kafka consumer for topic {self.topic} started")
