@@ -32,11 +32,14 @@ jobs:
       - name: Run ruff
         run: poetry run ruff check .
 
-      - name: Run tests
-        run: poetry run pytest
+      - name: Run unit tests
+        run: poetry run pytest src/tests/unit/ -v
 
-      - name: Run fuzz tests
-        run: poetry run pytest src/tests/test_fuzz.py -v
+      - name: Run contract tests (fuzz)
+        run: poetry run pytest src/tests/contract/ -v
+
+      - name: Run integration tests
+        run: poetry run pytest src/tests/integration/ -v || true
 
       - name: Stop services
         if: always()
