@@ -12,6 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for services
+        run: sleep 20
+
       - name: Install poetry
         run: pipx install poetry
 
@@ -31,3 +37,7 @@ jobs:
 
       - name: Run fuzz tests
         run: poetry run pytest src/tests/test_fuzz.py -v
+
+      - name: Stop services
+        if: always()
+        run: docker compose down
