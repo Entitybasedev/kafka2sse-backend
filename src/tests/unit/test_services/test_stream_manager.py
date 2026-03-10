@@ -74,7 +74,8 @@ class TestEventRouter:
             entity_id="Q42",
             revision_id=12345,
             change_type="edit",
-            changed_at="2023-01-01T12:00:00Z"
+            changed_at="2023-01-01T12:00:00Z",
+            user_id="user1"
         )
         event = SSEEvent(
             event_type="entity_change",
