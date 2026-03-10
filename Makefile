@@ -1,4 +1,4 @@
-.PHONY: help run clean stop build build-no-cache run-build-no-cache release
+.PHONY: help run clean stop build build-no-cache run-build-no-cache release test coverage
 
 help:
 	@echo "Available targets:"
@@ -9,6 +9,9 @@ help:
 	@echo "  make build-no-cache    - Build the Docker image without using cache"
 	@echo "  make run-build-no-cache - Build without cache and run the container"
 	@echo "  make release          - Create release: update version, commit, and tag (e.g., v2026.3.5)"
+	@echo "  make test             - Run unit and contract tests"
+	@echo "  make test-all          - Run all tests including integration"
+	@echo "  make coverage         - Run tests with coverage report"
 
 release:
 	./scripts/run-release.sh
@@ -44,3 +47,12 @@ run-build-no-cache: stop clean build-no-cache
 		-e KAFKA_BROKERS=$(KAFKA_BROKERS) \
 		--network host \
 		$(IMAGE_NAME)
+
+test:
+	poetry run pytest src/tests/unit/ src/tests/contract/ -v
+
+test-all:
+	poetry run pytest src/tests/ -v
+
+coverage:
+	poetry run pytest src/tests/unit/ src/tests/contract/ --cov=src --cov-report=term-missing --cov-report=html
