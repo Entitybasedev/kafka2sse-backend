@@ -13,7 +13,7 @@ def test_topic():
 def kafka_producer():
     producer = Producer({"bootstrap.servers": "localhost:9092"})
     yield producer
-    producer.flush()
+    producer.flush(timeout=5)
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def setup_topic(test_topic, kafka_producer):
             test_topic,
             value=json.dumps(msg).encode("utf-8")
         )
-    kafka_producer.flush()
+    kafka_producer.flush(timeout=5)
 
     yield test_topic
 
@@ -49,19 +49,18 @@ class TestKafkaIntegration:
         """Test publishing a message and consuming it via SSE endpoint."""
         from src.main import app
         
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
         
         test_message = {"id": "Q999", "rev": 42, "type": "edit", "at": "2024-06-01T12:00:00Z", "user": "integration"}
         kafka_producer.produce(
             test_topic,
             value=json.dumps(test_message).encode("utf-8")
         )
-        kafka_producer.flush()
+        kafka_producer.flush(timeout=5)
 
-        response = client.get(f"/v1/streams/{test_topic}", params={"limit": 1})
-        
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers.get("content-type", "")
+        with client.stream("GET", f"/v1/streams/{test_topic}", params={"limit": 1}, timeout=5) as response:
+            assert response.status_code == 200
+            assert "text/event-stream" in response.headers.get("content-type", "")
 
     def test_stream_metadata(self, setup_topic, test_topic):
         """Test getting metadata for a topic."""
