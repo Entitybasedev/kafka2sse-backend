@@ -14,6 +14,7 @@ class TestEntityChange:
             "from_revision_id": 12344,
             "changed_at": "2023-01-01T12:00:00Z",
             "edit_summary": "Updated description",
+            "user_id": "user1",
         }
         entity = EntityChange(**data)
         assert entity.entity_id == "Q42"
@@ -27,6 +28,7 @@ class TestEntityChange:
             "revision_id": 12345,
             "change_type": "edit",
             "changed_at": "2023-01-01T12:00:00Z",
+            "user_id": "user1",
         }
         entity = EntityChange(**data)
         assert entity.from_revision_id == 0
@@ -38,6 +40,7 @@ class TestEntityChange:
             "revision_id": 12345,
             "change_type": "invalid_type",
             "changed_at": "2023-01-01T12:00:00Z",
+            "user_id": "user1",
         }
         with pytest.raises(ValidationError):
             EntityChange(**data)
@@ -48,6 +51,7 @@ class TestEntityChange:
             "revision_id": -1,
             "change_type": "edit",
             "changed_at": "2023-01-01T12:00:00Z",
+            "user_id": "user1",
         }
         with pytest.raises(ValidationError):
             EntityChange(**data)
@@ -63,6 +67,7 @@ class TestSSEEvent:
                 "revision_id": 12345,
                 "change_type": "edit",
                 "changed_at": "2023-01-01T12:00:00Z",
+                "user_id": "user1",
             },
         }
         sse = SSEEvent(**data)
@@ -79,6 +84,7 @@ class TestSSEEvent:
                 "revision_id": 12345,
                 "change_type": "edit",
                 "changed_at": "2023-01-01T12:00:00Z",
+                "user_id": "user1",
             },
         }
         with pytest.raises(ValidationError):
@@ -97,6 +103,7 @@ class TestSSEOutputFormat:
                 "from_revision_id": 12344,
                 "changed_at": "2023-01-01T12:00:00Z",
                 "edit_summary": "Updated description",
+                "user_id": "user1",
             },
         }
         sse = SSEEvent(**data)
