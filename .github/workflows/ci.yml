@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tests
         run: poetry run pytest
+
+      - name: Run fuzz tests
+        run: poetry run pytest src/tests/test_fuzz.py -v
