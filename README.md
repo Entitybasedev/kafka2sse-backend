@@ -8,9 +8,9 @@ Traditional Kafka consumers block when waiting for messages. This service solves
 
 ```mermaid
 flowchart LR
-    A[Kafka Consumer<br/>(blocking)] -->|poll()| B[Thread Pool]
-    B -->|queue.put_nowait()| C[asyncio Queue]
-    C -->|await queue.get()| D[SSE Stream]
+    A[Kafka Consumer<br/>(blocking)] --> B[Thread Pool]
+    B --> C[asyncio Queue]
+    C --> D[SSE Stream]
     
     style A fill:#f9f,stroke:#333
     style B fill:#ff9,stroke:#333
