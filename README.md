@@ -8,7 +8,7 @@ Traditional Kafka consumers block when waiting for messages. This service solves
 
 ```mermaid
 flowchart LR
-    A[Kafka Consumer<br/>(blocking)] --> B[Thread Pool]
+    A[Kafka Consumer\n(blocking)] --> B[Thread Pool]
     B --> C[asyncio Queue]
     C --> D[SSE Stream]
     
@@ -86,13 +86,13 @@ flowchart TB
     
     subgraph "FastAPI Server"
         subgraph StreamManager
-            TP[Thread Pool<br/>Kafka Consumer]
-            Q[asyncio.Queue<br/>per client]
+            TP[Thread Pool\nKafka Consumer]
+            Q[asyncio.Queue\nper client]
         end
-        SG[event_generator<br/>SSE Response]
+        SG[event_generator\nSSE Response]
     end
     
-    K[Kafka<br/>entity_change topic] --> TP
+    K[Kafka\nentity_change topic] --> TP
     TP --> Q
     Q --> SG
     SG --> C1
