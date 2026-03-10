@@ -137,7 +137,7 @@ class StreamManager:
                 return (low, high)
             consumer.close()
             return (0, 0)
-        except Exception as e:
+        except Exception:
             logger.exception(f"Error getting watermark offsets for {topic}")
             return (0, 0)
 

@@ -1,0 +1,4 @@
+# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/models/sse_event.py
+# hypothesis_version: 6.151.9
+
+[12344, 12345, '2023-01-01T12:00:00Z', '82c5a9', 'Q42', 'Updated description', 'change_type', 'changed_at', 'data', 'edit', 'edit_summary', 'entity_change', 'entity_id', 'event_type', 'examples', 'from_revision_id', 'id', 'json_schema_extra', 'populate_by_name', 'revision_id']

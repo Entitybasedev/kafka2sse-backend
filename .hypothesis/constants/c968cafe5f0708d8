@@ -1,0 +1,4 @@
+# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/services/stream_manager.py
+# hypothesis_version: 6.151.9
+
+['bootstrap.servers', 'connected_clients', 'earliest_offset', 'group.id', 'latest_offset', 'message_count', 'metadata-reader', 'topic']

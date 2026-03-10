@@ -1,7 +1,5 @@
-import pytest
-from hypothesis import given, settings, assume, example
+from hypothesis import given, settings
 import hypothesis.strategies as st
-from unittest.mock import patch, MagicMock
 import json
 
 from fastapi.testclient import TestClient
@@ -207,10 +205,10 @@ class TestMalformedMessages:
         
         try:
             data = json.loads(json_str)
-            entity = EntityChange(**data)
+            _ = EntityChange(**data)
         except (ValueError, TypeError, KeyError):
             pass
-        except Exception as e:
+        except Exception:
             pass
 
     @settings(deadline=None, max_examples=50)
@@ -235,10 +233,10 @@ class TestMalformedMessages:
         try:
             data = json.loads(json_str)
             if isinstance(data, dict):
-                entity = EntityChange(**data)
+                _ = EntityChange(**data)
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
-        except Exception as e:
+        except Exception:
             pass
 
 

@@ -1,0 +1,4 @@
+# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/models/entity_change.py
+# hypothesis_version: 6.151.9
+
+['Summary of the edit', 'The type of change', 'Z', 'archival', 'at', 'changed_at', 'creation', 'edit', 'from_rev', 'hard_delete', 'id', 'lock', 'redirect', 'rev', 'soft_delete', 'summary', 'type', 'unarchival', 'unlock', 'unredirect', 'user']

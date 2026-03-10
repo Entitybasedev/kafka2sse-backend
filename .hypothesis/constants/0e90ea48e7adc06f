@@ -1,0 +1,4 @@
+# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/main.py
+# hypothesis_version: 6.151.9
+
+[1.0, 100, 3000, 5000, '*', '/', '/docs', '/health', '/openapi.json', '/redoc', '/v1/streams/{topic}', '/v1/topics', '1.0.0', 'Kafka2SSE API', '_', '__main__', 'auto.offset.reset', 'bootstrap.servers', 'confluent_kafka', 'connected', 'degraded', 'disconnected', 'earliest_offset', 'enable.auto.commit', 'entity_change', 'error', 'group.id', 'latest', 'latest_offset', 'message_count', 'metadata-reader', 'ok', 'rdkafka', 'rdkafka consumer', 'rdkafka.conn', 'rdkafka.int', 'socket.timeout.ms', 'topic', 'topics', 'utf-8']

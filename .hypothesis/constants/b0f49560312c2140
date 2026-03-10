@@ -1,0 +1,4 @@
+# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/services/kafka_consumer.py
+# hypothesis_version: 6.151.9
+
+[1.0, 1000, 'auto.offset.reset', 'bootstrap.servers', 'enable.auto.commit', 'entity_change', 'group.id', 'latest', 'utf-8']

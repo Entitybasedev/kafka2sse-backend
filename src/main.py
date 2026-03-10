@@ -22,7 +22,6 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 from confluent_kafka import KafkaError, KafkaException, Producer
 from fastapi import FastAPI
@@ -47,10 +46,9 @@ def get_available_topics() -> list[str]:
         raise
 
 
-from src.config import config
-from src.services.client_connection import ClientConnection
-from src.services.sse_broadcaster import SSEBroadcaster
-from src.services.stream_manager import redis_state, stream_manager
+from src.config import config  # noqa: E402
+from src.services.client_connection import ClientConnection  # noqa: E402
+from src.services.stream_manager import stream_manager  # noqa: E402
 
 
 logging.basicConfig(
@@ -267,9 +265,9 @@ async def stream(
                     try:
                         client.queue.get_nowait()
                         client.queue.put_nowait(event)
-                    except:
+                    except Exception:
                         pass
-            except:
+            except Exception:
                 pass
 
     # Start kafka in thread pool
