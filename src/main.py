@@ -297,6 +297,33 @@ async def root():
 
 
 if __name__ == "__main__":
+    import logging.config
+
+    logging_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            },
+        },
+        "handlers": {
+            "default": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+            },
+        },
+        "root": {
+            "level": "INFO",
+            "handlers": ["default"],
+        },
+    }
+
     import uvicorn
 
-    uvicorn.run(app, host=config.server.host, port=config.server.port)
+    uvicorn.run(
+        app,
+        host=config.server.host,
+        port=config.server.port,
+        log_config=logging_config,
+    )
