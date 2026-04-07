@@ -20,6 +20,7 @@ class ServerConfig(BaseModel):
     """Configuration for the HTTP server."""
     host: str = getenv("HOST", "0.0.0.0")
     port: int = int(getenv("PORT", "8888"))
+    app_version: str = getenv("VERSION", "v0.0.0")
 
 
 class Config(BaseModel):

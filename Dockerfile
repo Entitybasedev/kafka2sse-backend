@@ -30,6 +30,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY src ./src
 COPY README.md .env.example ./
 
+ARG VERSION=v2026.4.8
+ENV VERSION=$VERSION
 ENV PYTHONPATH=/app
 ENV KAFKA_BROKERS=localhost:9092
 ENV VALKEY_HOST=localhost

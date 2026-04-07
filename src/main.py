@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Kafka2SSE API",
-    version="1.0.0",
+    version=config.server.app_version,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
