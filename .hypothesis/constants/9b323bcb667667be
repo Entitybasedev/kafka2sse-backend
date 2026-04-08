@@ -1,4 +1,0 @@
-# file: /home/dpriskorn/src/entitybase-orchestrator/libs/kafka2sse-backend/src/config.py
-# hypothesis_version: 6.151.9
-
-[',', '0.0.0.0', '100', '6379', '8888', 'HOST', 'KAFKA_BROKERS', 'PORT', 'VALKEY_HOST', 'VALKEY_PORT', 'localhost', 'localhost:9092']
