@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY src ./src
-COPY README.md .env.example ./
 
 ARG VERSION=v2026.4.8
 ENV VERSION=$VERSION
