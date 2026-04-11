@@ -53,6 +53,7 @@ import json
 import logging
 import sys
 from contextlib import asynccontextmanager
+from typing import Any
 
 from confluent_kafka import KafkaError, KafkaException, Producer
 from fastapi import FastAPI
