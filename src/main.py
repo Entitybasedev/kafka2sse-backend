@@ -49,6 +49,7 @@ LOGGING_CONFIG = {
 
 logging.config.dictConfig(LOGGING_CONFIG)
 import asyncio
+import json
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -77,6 +78,8 @@ def get_available_topics() -> list[str]:
 
 
 from src.config import config  # noqa: E402
+from src.models.entity_change import EntityChange  # noqa: E402
+from src.models.sse_event import SSEEvent  # noqa: E402
 from src.services.client_connection import ClientConnection  # noqa: E402
 from src.services.stream_manager import stream_manager  # noqa: E402
 
@@ -239,6 +242,23 @@ async def stream(
     client.limit = limit
     logger.info(f"Created client with limit={client.limit}")
 
+    log_prefix = f"kafka2sse-{topic}-{client.id}"
+
+    class RebalanceListener:
+        """Listener for Kafka rebalance events - logs for debugging."""
+        
+        def __init__(self, log_prefix: str):
+            self.log_prefix = log_prefix
+        
+        async def on_partitions_assigned(self, consumer, partitions):
+            logger.info(f"[{self.log_prefix}] Partitions ASSIGNED: {partitions}")
+        
+        async def on_partitions_revoked(self, consumer, partitions):
+            logger.info(f"[{self.log_prefix}] Partitions REVOKED: {partitions}")
+        
+        async def on_partitions_lost(self, consumer, partitions):
+            logger.warning(f"[{self.log_prefix}] Partitions LOST: {partitions}")
+
     async def kafka_consumer():
         """
         Async Kafka consumer using aiokafka.
@@ -249,65 +269,122 @@ async def stream(
         from aiokafka import AIOKafkaConsumer
         from aiokafka.structs import TopicPartition
         
-        consumer = AIOKafkaConsumer(
-            bootstrap_servers=config.kafka.brokers,
-            group_id=f"sse-{topic}-{client.id}",
-            enable_auto_commit=False,
-        )
-        
-        await consumer.start()
-        logger.info(f"Kafka consumer started for {topic}")
+        log_prefix = f"kafka2sse-{topic}-{client.id}"
+        consumer = None
         
         try:
-            await asyncio.sleep(0.5)  # Wait for metadata
-            if offset is not None:
-                tp = TopicPartition(topic, 0)
-                await consumer.assign([tp])
-                await consumer.seek(tp, offset)
-                logger.info(f"Seeked to offset {offset}")
-            else:
-                await consumer.subscribe([topic])
-                logger.info(f"Subscribed to topic {topic}")
+            consumer = AIOKafkaConsumer(
+                bootstrap_servers=config.kafka.brokers,
+                group_id=log_prefix,
+                enable_auto_commit=False,
+                auto_offset_reset="earliest",
+                request_timeout_ms=30000,
+                retry_backoff_ms=1000,
+            )
             
-            async for msg in consumer:
+            logger.info(f"[{log_prefix}] Starting Kafka consumer for {topic}")
+            
+            await consumer.start()
+            logger.info(f"[{log_prefix}] Consumer started")
+            
+            if offset is not None:
+                # Use assign() for precise offset seeking  
+                try:
+                    tp = TopicPartition(topic, 0)
+                    await consumer.assign([tp])
+                    await consumer.seek(tp, offset)
+                    logger.info(f"[{log_prefix}] Assigned partition {tp} and seeked to offset {offset}")
+                except Exception as e:
+                    logger.warning(f"[{log_prefix}] Failed to seek to offset {offset}: {e}, falling back to subscribe")
+                    consumer.subscribe([topic])
+            else:
+                # Subscribe directly - triggers metadata fetch
+                consumer.subscribe([topic])
+            
+            logger.info(f"[{log_prefix}] Subscribed to topic {topic}")
+
+            logger.info(f"[{log_prefix}] Starting consumption loop...")
+            
+            # Track assignment changes
+            last_assignment = set()
+            
+            # Use getmany() for more explicit control instead of async for
+            while True:
+                # Check if limit reached
                 if client.limit and client.events_sent >= client.limit:
-                    logger.info(f"Limit reached: {client.events_sent}/{client.limit}")
+                    logger.info(f"[{log_prefix}] Limit reached: {client.events_sent}/{client.limit}")
                     break
                 
-                try:
-                    value = json.loads(msg.value.decode("utf-8"))
-                    entity_change = EntityChange(**value)
-                    event = SSEEvent(
-                        event_type="entity_change",
-                        id=str(msg.offset),
-                        data=entity_change,
-                    )
-                    client.events_sent += 1
-                    try:
-                        client.queue.put_nowait(event)
-                    except asyncio.QueueFull:
+                # Check current assignment
+                current_assignment = consumer.assignment()
+                if current_assignment != last_assignment:
+                    logger.info(f"[{log_prefix}] Assignment changed: {current_assignment}")
+                    last_assignment = current_assignment
+                
+                # Use getmany for explicit control
+                logger.debug(f"[{log_prefix}] Waiting for messages...")
+                records = await consumer.getmany(timeout_ms=1000)
+                
+                if not records:
+                    logger.debug(f"[{log_prefix}] No messages in this poll")
+                    # Continue waiting
+                    continue
+                
+                logger.info(f"[{log_prefix}] Received {sum(len(msgs) for msgs in records.values())} messages")
+                
+                for tp, messages in records.items():
+                    for msg in messages:
+                        logger.debug(f"Kafka message: topic={msg.topic}, partition={msg.partition}, offset={msg.offset}, key={msg.key}")
+
+                        raw_value = None
                         try:
-                            client.queue.get_nowait()
-                            client.queue.put_nowait(event)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+                            raw_value = msg.value.decode("utf-8")
+                            logger.debug(f"Kafka raw value: {raw_value}")
+                            value = json.loads(raw_value)
+                            entity_change = EntityChange(**value)
+                            logger.info(f"[{log_prefix}] Parsed entity_change: entity_id={entity_change.entity_id}, change_type={entity_change.change_type}, revision_id={entity_change.revision_id}")
+                            event = SSEEvent(
+                                event_type="entity_change",
+                                id=str(msg.offset),
+                                data=entity_change,
+                            )
+                            client.events_sent += 1
+                            try:
+                                client.queue.put_nowait(event)
+                                logger.debug(f"Event queued to client: offset={msg.offset}, queue_size={client.queue.qsize()}")
+                            except asyncio.QueueFull:
+                                try:
+                                    client.queue.get_nowait()
+                                    client.queue.put_nowait(event)
+                                    logger.debug(f"Event queued (replaced): offset={msg.offset}")
+                                except Exception as e:
+                                    logger.warning(f"Queue full and replace failed: {e}")
+                        except Exception as e:
+                            logger.warning(f"Failed to process message: {e}, offset={msg.offset}, raw_value={raw_value or 'N/A'}")
+        except asyncio.CancelledError:
+            logger.info(f"[{log_prefix}] Consumer task cancelled")
+        except Exception as e:
+            logger.exception(f"[{log_prefix}] ERROR in kafka_consumer: {e}")
         finally:
-            await consumer.stop()
-            logger.info("Kafka consumer stopped")
+            if 'consumer' in locals():
+                try:
+                    await consumer.stop()
+                except Exception as e:
+                    logger.warning(f"[{log_prefix}] Error stopping consumer: {e}")
+            logger.info(f"[{log_prefix}] Kafka consumer cleanup done")
 
     kafka_task = asyncio.create_task(kafka_consumer())
 
     async def event_generator():
-        logger.info(f"event_generator started, client.limit={client.limit}")
+        logger.info(f"[{log_prefix}] event_generator started, client.limit={client.limit}")
         try:
             while True:
                 if client.limit and client.events_sent >= client.limit:
-                    logger.info(f"Limit reached: {client.events_sent}/{client.limit}")
+                    logger.info(f"[{log_prefix}] Limit reached: {client.events_sent}/{client.limit}")
                     break
                 try:
                     event = await asyncio.wait_for(client.queue.get(), timeout=30)
+                    logger.debug(f"[{log_prefix}] Sending SSE event: id={event.id}, entity_id={event.data.entity_id}")
                     data = event.model_dump_json()
                     yield f"data: {data}\n\n"
                 except asyncio.TimeoutError:
