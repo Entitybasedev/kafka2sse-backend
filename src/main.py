@@ -129,25 +129,43 @@ app.add_middleware(
 class HealthResponse(BaseModel):
     status: str
     kafka: str
+    backend_type: str = "unknown"
+
+
+def _detect_backend_type(metadata: Any) -> str:
+    """Detect if the backend is Kafka or Redpanda from broker metadata."""
+    if not metadata or not metadata.brokers:
+        return "unknown"
+    
+    # Check cluster ID - Redpanda typically has "redpanda" in the cluster ID
+    if metadata.cluster_id and "redpanda" in metadata.cluster_id.lower():
+        return "redpanda"
+    
+    # Check broker version - Redpanda reports as version 0.0.0 but has specific features
+    # Default to kafka as it's the most common
+    return "kafka"
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     kafka_status = "disconnected"
+    backend_type = "unknown"
     try:
         producer = Producer({
             "bootstrap.servers": config.kafka.brokers,
             "socket.timeout.ms": 3000,
             "metadata.request.timeout.ms": 5000,
         })
-        producer.list_topics(timeout=3)
+        metadata = producer.list_topics(timeout=3)
         kafka_status = "connected"
+        backend_type = _detect_backend_type(metadata)
     except KafkaException:
         pass
 
     return HealthResponse(
         status="ok" if kafka_status == "connected" else "degraded",
         kafka=kafka_status,
+        backend_type=backend_type,
     )
 
 
