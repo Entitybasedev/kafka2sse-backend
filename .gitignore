@@ -1,3 +1,4 @@
 entitybase-schemas
 __pycache__/
 .hypothesis/
+.coverage

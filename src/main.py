@@ -18,6 +18,36 @@ Example:
     >>> kafka_task = loop.run_in_executor(None, blocking_kafka_function)
     This runs blocking_kafka_function in a separate thread, keeping the event loop responsive.
 """
+
+import logging
+import logging.config
+import os
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "default": {
+            "level": LOG_LEVEL,
+            "formatter": "standard",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "": {"level": LOG_LEVEL, "handlers": ["default"], "propagate": False},
+        "uvicorn.error": {"level": "DEBUG", "handlers": ["default"]},
+        "uvicorn.access": {"level": "DEBUG", "handlers": ["default"]},
+        "rdkafka": {"level": "INFO", "handlers": ["default"]},
+    },
+}
+
+logging.config.dictConfig(LOGGING_CONFIG)
 import asyncio
 import logging
 import sys
@@ -180,6 +210,9 @@ async def stream(
     since: str | None = None,
     limit: int | None = None,
 ):
+    logger.info(f"=== STREAM ENDPOINT CALLED ===")
+    logger.info(f"topic={topic}, offset={offset}, offset_type={type(offset)}, since={since}, limit={limit}")
+    
     """
     Stream SSE events from a Kafka topic.
     
@@ -199,84 +232,80 @@ async def stream(
     Returns:
         Server-Sent Events response that streams Kafka messages as JSON.
     """
-    logger.info(f"Stream endpoint called for topic={topic}")
+    logger.info(f"Stream endpoint called for topic={topic}, offset={offset}, limit={limit}")
 
     # Create a client connection
     client = ClientConnection(queue_size=100)
     client.limit = limit
+    logger.info(f"Created client with limit={client.limit}")
 
-    # Create kafka consumer in a separate thread
-    from confluent_kafka import Consumer, TopicPartition
-    from src.models.entity_change import EntityChange
-    from src.models.sse_event import SSEEvent
-    import json
-
-    def kafka_consumer_thread():
+    async def kafka_consumer():
         """
-        Blocking Kafka consumer that runs in a separate thread.
+        Async Kafka consumer using aiokafka.
         
-        Runs in ThreadPoolExecutor to avoid blocking the async event loop.
-        Polls Kafka and puts messages into client.queue for the SSE generator.
-        
-        Note:
-            This is a blocking function - must run in thread pool, not async context.
-            The confluent-kafka Consumer.poll() is a blocking call that waits for messages.
-            Without running in a thread, it would freeze the entire FastAPI server.
-        
-        How it works:
-            1. Creates a Kafka Consumer and subscribes to the topic
-            2. Loops forever calling poll() - this BLOCKS waiting for messages
-            3. When message arrives, puts it in the asyncio.Queue
-            4. The async event_generator reads from the queue without blocking
+        aiokafka provides reliable offset seeking with assign() + seek().
+        Runs directly in async context - no thread pool needed.
         """
-        conf = {
-            "bootstrap.servers": config.kafka.brokers,
-            "group.id": f"sse-{topic}-{client.id}",
-            "auto.offset.reset": "latest" if offset is None else "error",
-            "enable.auto.commit": True,
-        }
-        consumer = Consumer(conf)
+        from aiokafka import AIOKafkaConsumer
+        from aiokafka.structs import TopicPartition
         
-        if offset is not None:
-            consumer.assign([TopicPartition(topic, 0, offset)])
-        else:
-            consumer.subscribe([topic])
+        consumer = AIOKafkaConsumer(
+            bootstrap_servers=config.kafka.brokers,
+            group_id=f"sse-{topic}-{client.id}",
+            enable_auto_commit=False,
+        )
         
+        await consumer.start()
         logger.info(f"Kafka consumer started for {topic}")
         
-        while True:
-            msg = consumer.poll(timeout=1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                continue
+        try:
+            await asyncio.sleep(0.5)  # Wait for metadata
+            if offset is not None:
+                tp = TopicPartition(topic, 0)
+                await consumer.assign([tp])
+                await consumer.seek(tp, offset)
+                logger.info(f"Seeked to offset {offset}")
+            else:
+                await consumer.subscribe([topic])
+                logger.info(f"Subscribed to topic {topic}")
             
-            try:
-                value = json.loads(msg.value().decode("utf-8"))
-                entity_change = EntityChange(**value)
-                event = SSEEvent(
-                    event_type="entity_change",
-                    id=str(msg.offset()),
-                    data=entity_change,
-                )
+            async for msg in consumer:
+                if client.limit and client.events_sent >= client.limit:
+                    logger.info(f"Limit reached: {client.events_sent}/{client.limit}")
+                    break
+                
                 try:
-                    client.queue.put_nowait(event)
-                except asyncio.QueueFull:
+                    value = json.loads(msg.value.decode("utf-8"))
+                    entity_change = EntityChange(**value)
+                    event = SSEEvent(
+                        event_type="entity_change",
+                        id=str(msg.offset),
+                        data=entity_change,
+                    )
+                    client.events_sent += 1
                     try:
-                        client.queue.get_nowait()
                         client.queue.put_nowait(event)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    except asyncio.QueueFull:
+                        try:
+                            client.queue.get_nowait()
+                            client.queue.put_nowait(event)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            await consumer.stop()
+            logger.info("Kafka consumer stopped")
 
-    # Start kafka in thread pool
-    loop = asyncio.get_event_loop()
-    kafka_task = loop.run_in_executor(None, kafka_consumer_thread)
+    kafka_task = asyncio.create_task(kafka_consumer())
 
     async def event_generator():
+        logger.info(f"event_generator started, client.limit={client.limit}")
         try:
             while True:
+                if client.limit and client.events_sent >= client.limit:
+                    logger.info(f"Limit reached: {client.events_sent}/{client.limit}")
+                    break
                 try:
                     event = await asyncio.wait_for(client.queue.get(), timeout=30)
                     data = event.model_dump_json()
@@ -297,33 +326,11 @@ async def root():
 
 
 if __name__ == "__main__":
-    import logging.config
-
-    logging_config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            },
-        },
-        "handlers": {
-            "default": {
-                "class": "logging.StreamHandler",
-                "formatter": "default",
-            },
-        },
-        "root": {
-            "level": "INFO",
-            "handlers": ["default"],
-        },
-    }
-
     import uvicorn
 
     uvicorn.run(
         app,
         host=config.server.host,
         port=config.server.port,
-        log_config=logging_config,
+        log_config=LOGGING_CONFIG,
     )

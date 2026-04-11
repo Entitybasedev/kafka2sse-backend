@@ -1,7 +1,7 @@
 FROM python:3.13-slim AS builder
 WORKDIR /app
 
-# Build stage: Install compiler and dev headers to build confluent-kafka (C extension with librdkafka bindings)
+# Build stage: Install compiler and dev headers for confluent-kafka
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     librdkafka-dev \
@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.115,<1.0" \
     "httpx>=0.27,<1.0" \
     "sse-starlette>=2.0,<3.0" \
+    "aiokafka>=0.10,<1.0" \
     "confluent-kafka>=2.3,<3.0" \
     "pydantic>=2.5,<3.0" \
     "pyyaml>=6.0,<7.0" \
@@ -22,7 +23,6 @@ FROM python:3.13-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
     librdkafka1 \
     && rm -rf /var/lib/apt/lists/*
 

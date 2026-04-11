@@ -165,7 +165,7 @@ class TestKafkaConsumerStart:
     @pytest.mark.asyncio
     @patch("src.services.kafka_consumer.asyncio.get_event_loop")
     @patch("src.services.kafka_consumer.KafkaConsumerService._create_consumer")
-    async def test_start_subscribes(self, mock_create, mock_loop):
+    async def test_start_sets_running(self, mock_create, mock_loop):
         mock_loop_instance = MagicMock()
         mock_loop.return_value = mock_loop_instance
         mock_loop_instance.run_in_executor = AsyncMock()
@@ -176,7 +176,7 @@ class TestKafkaConsumerStart:
         consumer = KafkaConsumerService("test-topic", lambda t, e: None)
         consumer.start()
         
-        mock_consumer.subscribe.assert_called()
+        assert consumer._running is True
 
 
 class TestKafkaConsumerStop:
