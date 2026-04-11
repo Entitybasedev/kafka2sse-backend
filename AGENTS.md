@@ -32,6 +32,13 @@ Each class must be in its own file:
 - valkey (Redis alternative) for shared state between workers
 - sse-starlette for SSE support
 
+## Testing Requirements
+
+- Minimum 80% code coverage required
+- Tests must be placed in `tests/go/` directory at project root
+- Use pytest with pytest-asyncio for async tests
+- Use pytest-cov for coverage reporting
+
 ## Environment Variables
 
 - `KAFKA_BROKERS`: Kafka broker addresses (default: localhost:9092)

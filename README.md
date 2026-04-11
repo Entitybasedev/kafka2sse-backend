@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/dpriskorn/kafka2sse-backend/branch/main/graph/badge.svg)](https://codecov.io/gh/dpriskorn/kafka2sse-backend)
 
-A high-performance streaming service that delivers Kafka messages to HTTP clients via Server-Sent Events (SSE). Built with Python, FastAPI, and confluent-kafka.
+A high-performance streaming service that delivers Kafka messages to HTTP clients via Server-Sent Events (SSE). Built with Python, FastAPI, and aiokafka.
 
 ## Why kafka2sse?
 
